@@ -1,8 +1,8 @@
 # 📘 AWS Secure Cloud Pipeline – Technical Documentation
 
-**Author:** Filip (DevSecOps Engineer)
-**Status:** Phase 2 Completed (CI/CD with OIDC)
-**Tech Stack:** AWS, Terraform, GitHub Actions, OpenID Connect (OIDC)
+- **Author:** Filip (DevSecOps Engineer)
+- **Status:** Phase 2 Completed (CI/CD with OIDC)
+- **Tech Stack:** AWS, Terraform, GitHub Actions, OpenID Connect (OIDC)
 
 ---
 
