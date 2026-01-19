@@ -30,7 +30,7 @@ jobs:
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::${{secrets.AWS_ACCOUNT_ID}}:role/GitHubActions-Terraform-Role
+          role-to-assume: arn:aws:iam::781007641435:role/GitHubActions-Terraform-Role
           aws-region: eu-north-1 # Upewnij się, że to Twój region!
 
       # 3. Instalacja Terraforma na serwerze GitHuba
