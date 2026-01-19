@@ -6,11 +6,11 @@ terraform {
     }
   }
   backend "s3" {
-    bucket         = "milip-tf-state-backend-001"  # Nazwa bucketu z Kroku 1
-    key            = "global/s3/terraform.tfstate" # Ścieżka do pliku wewnątrz bucketu
+    bucket         = "milip-tf-state-backend-001"
+    key            = "global/s3/terraform.tfstate"
     region         = "eu-north-1"
-    dynamodb_table = "terraform-locks"         # Nazwa tabeli z Kroku 2
-    encrypt        = true                      # Szyfrowanie stanu na dysku AWS
+    dynamodb_table = "terraform-locks"
+    encrypt        = true
   }
 }
 
