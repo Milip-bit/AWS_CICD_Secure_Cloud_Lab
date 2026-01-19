@@ -5,41 +5,42 @@ on:
     branches:
       - main
     paths:
-      - 'secure-cloud-lab-dev/**'
+      - "secure-cloud-lab-dev/**" # Uruchom tylko gdy zmienimy coś w folderze DEV
 
 permissions:
-  id-token: write
-  contents: read
+  id-token: write # WYMAGANE do OIDC! To pozwala GitHubowi wygenerować token JWT
+  contents: read # Potrzebne, żeby pobrać kod (checkout)
 
 jobs:
   terraform-plan:
     name: "Terraform Plan (Dev)"
     runs-on: ubuntu-latest
+
+    # Ustawiamy domyślny folder pracy, bo masz monorepo
     defaults:
       run:
         working-directory: ./secure-cloud-lab-dev
 
     steps:
+      # 1. Pobranie kodu z repozytorium
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Debug Environment
-        run: |
-          echo "Sprawdzam poprawnosc srodowiska..."
-          echo "Account ID (Target): 781007641435"
-          echo "Region: eu-north-1"
-
+      # 2. Logowanie do AWS przez OIDC (Kluczowy moment!)
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: "arn:aws:iam::781007641435:role/GitHubActions-Terraform-Role"
-          aws-region: "eu-north-1"
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/GitHubActions-Terraform-Role
+          aws-region: eu-north-1 # Upewnij się, że to Twój region!
 
+      # 3. Instalacja Terraforma na serwerze GitHuba
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
+      # 4. Inicjalizacja (Pobranie stanu z Twojego S3)
       - name: Terraform Init
         run: terraform init
 
+      # 5. Planowanie (Sprawdzenie co się zmieni)
       - name: Terraform Plan
         run: terraform plan
