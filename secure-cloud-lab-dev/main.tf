@@ -1,4 +1,4 @@
-#Test of Trufflehog 2
+#Test of Trufflehog 3
 terraform {
   required_version = ">= 1.0.0"
   required_providers {
