@@ -1,115 +1,88 @@
-# 📘 AWS Secure Cloud Pipeline – Technical Documentation
+# 📘 AWS Secure Cloud Pipeline – Comprehensive Technical Documentation
 
-- **Author:** Filip (DevSecOps Engineer)
-- **Status:** Phase 2 Completed (CI/CD with OIDC)
-- **Tech Stack:** AWS, Terraform, GitHub Actions, OpenID Connect (OIDC)
+**Author:** Filip (DevSecOps Engineer)
+**Date:** January 2026
+**Project Status:** Phase 3 Completed (DevSecOps Integration)
 
 ---
 
 ## 1. Executive Summary
 
-This project aims to establish a secure, automated **Infrastructure as Code (IaC)** pipeline. Moving away from manual console operations ("ClickOps"), the infrastructure is defined in Terraform, version-controlled in Git, and deployed via GitHub Actions.
+This project demonstrates the implementation of a **Secure-by-Design** cloud infrastructure pipeline. The goal was to move away from manual console operations ("ClickOps") to a fully automated **Infrastructure as Code (IaC)** model using Terraform and GitHub Actions.
 
-A key focus of this project is **Security-by-Design**, implementing strict access controls, state locking, and credential-less authentication using OIDC.
+A critical focus was placed on **Shift-Left Security**—integrating security controls (Static Analysis, Secret Scanning, Policy Compliance) into the earliest stages of the CI/CD pipeline, ensuring that insecure code is rejected before it ever reaches the cloud.
 
 ---
 
 ## 2. Phase 0: Security Foundations & FinOps
 
-Before provisioning resources, the AWS environment was hardened to emulate enterprise standards.
+Before provisioning any resources, the AWS environment was hardened according to industry best practices.
 
-### 2.1. Root Account Security
+### 2.1. Identity & Access Management (IAM)
 
-- **Action:** Enabled Multi-Factor Authentication (MFA) on the Root user.
-- **Rationale:** The Root account has unlimited privileges. Compromise leads to total project loss. MFA is the first line of defense.
+- **Root Account Protection:** Enabled MFA (Multi-Factor Authentication) on the root account to prevent catastrophic takeover.
+- **Least Privilege Access:** Created a dedicated IAM User `devsecops-admin` for daily operations, avoiding the use of the root account.
+- **Local Security:** Configured AWS CLI credentials locally (`~/.aws/credentials`) ensuring no keys were hardcoded in scripts.
 
-### 2.2. IAM Identity Management
+### 2.2. FinOps Guardrails
 
-- **Action:** Created a dedicated IAM User `devsecops-admin` for daily development.
-- **Rationale:** Adhering to the **Least Privilege Principle**. Direct use of the Root account for daily tasks is a security anti-pattern.
-
-### 2.3. FinOps Guardrails
-
-- **Action:** Configured **AWS Budgets** with a specific alert threshold of **$1.00**.
-- **Rationale:** To prevent "Bill Shock" caused by accidental resource provisioning (e.g., leaving a large EC2 instance running) or malicious activity (e.g., crypto-jacking).
+- **AWS Budgets:** Implemented a budget alert with a threshold of **$1.00**.
+- **Rationale:** To provide early detection of resource misconfiguration (e.g., leaving large EC2 instances running) or potential account compromise (e.g., crypto-mining attacks).
 
 ---
 
 ## 3. Phase 1: Infrastructure as Code (Terraform)
 
-The infrastructure layer was designed for scalability and collaboration.
+The infrastructure layer was designed for scalability, security, and team collaboration.
 
 ### 3.1. Project Structure (Monorepo)
 
-Adopted a directory structure that supports multiple environments within a single repository:
+Adopted a directory structure supporting multiple environments:
 
 ```text
 AWS_CICD_Project/
-├── secure-cloud-lab-dev/   # Development Environment
+├── secure-cloud-lab-dev/   # Development Environment (Current Focus)
 │   ├── main.tf
-│   ├── .terraform.lock.hcl
+│   ├── .tflint.hcl
 │   └── .gitignore
 ├── secure-cloud-lab-prod/  # Production Environment (Placeholder)
 └── README.md
 
 ```
 
-### 3.2. Repository Security (`.gitignore`)
+### 3.2. Repository Hygiene (`.gitignore`)
 
-Configured Git to strictly ignore sensitive local files.
+Configured Git to strictly ignore sensitive local Terraform files:
 
-- **Ignored:** `.terraform/`, `*.tfstate`, `*.tfstate.backup`, `*.tfvars`.
-- **Rationale:** Terraform state files often contain unencrypted sensitive data (passwords, keys). Committing them to a public repository is a critical security vulnerability.
+- `.terraform/`
+- `*.tfstate`, `*.tfstate.backup`
+- `*.tfvars`
 
 ### 3.3. Remote State Management
 
-Instead of storing the `terraform.tfstate` file locally, we implemented a **Remote Backend** architecture.
+Instead of storing the `terraform.tfstate` file locally (which poses security risks and hinders collaboration), a Remote Backend architecture was deployed:
 
-- **Components:**
-
-1. **S3 Bucket:** Stores the encrypted state file.
-2. **DynamoDB Table:** Manages state locking.
-
-- **Configuration (`main.tf`):**
-
-```hcl
-terraform {
-  backend "s3" {
-    bucket         = "your-unique-state-bucket"
-    key            = "dev/terraform.tfstate"
-    region         = "eu-north-1"
-    encrypt        = true              # Encryption at rest
-    dynamodb_table = "terraform-locks" # Prevents race conditions
-  }
-}
-
-```
-
-- **Benefit:** Enables safe collaboration and prevents corruption if two processes (e.g., CI pipeline and a local developer) try to modify infrastructure simultaneously.
+- **Storage (S3):** The state file is stored in a private S3 bucket with **Server-Side Encryption (SSE-S3)** enabled.
+- **Locking (DynamoDB):** A DynamoDB table `terraform-locks` is used to prevent race conditions. If two pipelines run simultaneously, the database locks the state file to prevent corruption.
 
 ---
 
-## 4. Phase 2: Automated CI/CD with OIDC
+## 4. Phase 2: CI/CD with OIDC Authentication
 
-This phase replaced risky long-lived credentials with temporary, federated identities.
+This phase focused on eliminating long-lived credentials (`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`) from the CI/CD pipeline.
 
-### 4.1. The OIDC Mechanism (OpenID Connect)
+### 4.1. The Solution: OpenID Connect (OIDC)
 
-Instead of storing static `AWS_ACCESS_KEY_ID` and `SECRET_ACCESS_KEY` in GitHub Secrets (which can be leaked or need rotation), we configured AWS to trust GitHub as an Identity Provider.
+We configured a **Federated Identity** trust between GitHub and AWS.
 
-- **Workflow:**
-
-1. GitHub Actions requests a JWT (token) from GitHub's OIDC provider.
-2. The workflow sends this token to AWS STS (Security Token Service).
-3. AWS validates the token's signature and the repository claims.
-4. AWS issues short-lived credentials (valid for 1 hour).
+1. **Identity Provider:** Added GitHub's OIDC URL (`https://token.actions.githubusercontent.com`) to AWS IAM.
+2. **Thumbprint Validation:** Configured the specific SHA-1 certificate thumbprints for GitHub servers to establish a chain of trust.
 
 ### 4.2. IAM Role Configuration
 
-We created a specific role: `GitHubActions-Terraform-Role`.
-
-- **Trust Policy (The Guardrail):**
-  This JSON policy ensures only _this specific repository_ can assume the role.
+Created a specialized role: `GitHubActions-Terraform-Role`.
+**Trust Policy:**
+This JSON policy ensures that **only this specific GitHub repository** can assume the role.
 
 ```json
 {
@@ -118,15 +91,12 @@ We created a specific role: `GitHubActions-Terraform-Role`.
     {
       "Effect": "Allow",
       "Principal": {
-        "Federated": "arn:aws:iam::781007641435:oidc-provider/token.actions.githubusercontent.com"
+        "Federated": "arn:aws:iam::ACCOUNT_ID:oidc-provider/token.actions.githubusercontent.com"
       },
       "Action": "sts:AssumeRoleWithWebIdentity",
       "Condition": {
         "StringLike": {
           "token.actions.githubusercontent.com:sub": "repo:Milip-bit/AWS_CICD_Secure_Cloud_Lab:*"
-        },
-        "StringEquals": {
-          "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
         }
       }
     }
@@ -134,67 +104,80 @@ We created a specific role: `GitHubActions-Terraform-Role`.
 }
 ```
 
-### 4.3. GitHub Actions Workflow (`terraform-dev.yaml`)
+---
 
-The pipeline automates the `terraform plan` command.
+## 5. Phase 3: DevSecOps Integration (Shift-Left)
 
-**Key Snippet:**
+This phase transformed the pipeline from a simple "deployer" into a "security gatekeeper."
 
-```yaml
-permissions:
-  id-token: write # REQUIRED for OIDC token generation
-  contents: read
+### 5.1. Static Code Analysis (TFLint)
 
-steps:
-  - name: Configure AWS Credentials
-    uses: aws-actions/configure-aws-credentials@v4
-    with:
-      # Dynamic ARN construction using Secrets
-      role-to-assume: "arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/GitHubActions-Terraform-Role"
-      aws-region: "eu-north-1"
+- **Tool:** TFLint
+- **Purpose:** Validates Terraform code for syntax errors, deprecated syntax, and cloud provider-specific issues (e.g., invalid instance types).
+- **Configuration:** Added `.tflint.hcl` and enforced `required_version` in `main.tf` to standardize the Terraform version across the team.
+
+### 5.2. Secret Scanning (TruffleHog)
+
+- **Tool:** TruffleHog (v3/main)
+- **Purpose:** Scans the repository history for leaked credentials.
+- **Key Configuration:**
+- `fetch-depth: 0`: Forces the pipeline to pull the entire git history, not just the latest commit, ensuring deep scanning.
+- `--only-verified`: Checks if found keys are active to reduce false positives.
+
+### 5.3. Infrastructure Security Scanning (Checkov)
+
+- **Tool:** Checkov (by Prisma Cloud)
+- **Purpose:** Scans Terraform code against CIS Benchmarks and security best practices.
+- **Implementation & Risk Acceptance:**
+- **Identified Issue:** The S3 bucket lacked versioning (Critical Risk).
+- **Fix:** Updated `main.tf` to enable versioning.
+- **Risk Acceptance:** Several checks (e.g., KMS encryption, Cross-Region Replication) were excessively costly for a Lab environment. These were explicitly skipped using inline comments:
+
+```hcl
+# checkov:skip=CKV_AWS_145: "Skipping KMS encryption to reduce lab costs"
+
 ```
 
 ---
 
-## 5. Engineering Challenges & Troubleshooting
+## 6. Engineering Challenges & Troubleshooting Log
 
-During implementation, we encountered a critical error: **"Could not assume role with OIDC: Request ARN is invalid"**. This required deep debugging.
+A summary of the critical issues encountered and resolved during implementation.
 
-### Issue 1: Missing OIDC Thumbprint
+### Issue 1: "Request ARN is invalid" (The OIDC Thumbprint Saga)
 
-- **Symptom:** AWS refused the connection immediately, but the error message was vague.
-- **Root Cause:** The OIDC Identity Provider in AWS did not have the correct certificate thumbprint for GitHub. AWS could not verify the SSL chain of trust.
-- **Resolution:** We manually updated the thumbprint list using the AWS CLI:
+- **Symptom:** The CI/CD pipeline failed to authenticate with AWS, displaying a generic `Invalid ARN` error.
+- **Root Cause:** The AWS IAM Identity Provider did not have the correct/current Certificate Thumbprint for GitHub, causing the SSL handshake to fail.
+- **Resolution:** Manually retrieved the GitHub OIDC thumbprints (`6938fd4d...`) and updated the provider via AWS CLI:
 
 ```bash
-aws iam update-open-id-connect-provider-thumbprint \
-  --open-id-connect-provider-arn arn:aws:iam::... \
-  --thumbprint-list 6938fd4d98bab03faadb97b34396831e3780aea1 1c58a3a8518e8759bf075b76b750d4f2df264fcd
+aws iam update-open-id-connect-provider-thumbprint ...
 
 ```
 
-### Issue 2: Secret Misconfiguration (The "Double ARN" Bug)
+### Issue 2: The Double ARN Injection
 
-- **Symptom:** Even after fixing the thumbprint, the error persisted.
-- **Root Cause:** The GitHub Secret `AWS_ACCOUNT_ID` was incorrectly set to the _full ARN string_ (`arn:aws:iam::78...`) instead of just the numeric ID (`78...`).
-- **Result:** The pipeline constructed a malformed string:
-  `arn:aws:iam::arn:aws:iam::781007641435:role/...`
-- **Resolution:** Updated the GitHub Secret to contain **only** the 12-digit Account ID.
+- **Symptom:** Authentication failed despite fixing the thumbprint.
+- **Root Cause:** The GitHub Secret `AWS_ACCOUNT_ID` contained the full ARN string (`arn:aws:iam::123...`) instead of just the ID (`123...`). The pipeline code concatenated this, resulting in `arn:aws:iam::arn:aws:iam::123...`.
+- **Resolution:** Updated the GitHub Secret to contain only the numeric ID and adjusted the YAML workflow to construct the ARN dynamically.
 
----
+### Issue 3: Shallow Clone Scanning
 
-## 6. Current Status & Next Steps
-
-**Achievements:**
-✅ Secure AWS Environment (MFA, FinOps).
-✅ Production-ready Terraform State (S3 + DynamoDB).
-✅ Password-less CI/CD authentication via OIDC.
-
-**Upcoming Roadmap (Phase 3):**
-
-- **Static Analysis:** Implementing `tflint` for code quality.
-- **Security Scanning:** Integrating **TruffleHog** (secret detection) and **Checkov** (IaC security scanning) to block insecure infrastructure before deployment.
+- **Symptom:** TruffleHog passed successfully in milliseconds without actually scanning the history.
+- **Root Cause:** GitHub Actions defaults to `fetch-depth: 1` (shallow clone). TruffleHog cannot scan history that isn't there.
+- **Resolution:** Updated the `actions/checkout` step to use `fetch-depth: 0`.
 
 ---
 
-**End of Document**
+## 7. Current Workflow Architecture
+
+The final `.github/workflows/terraform-dev.yaml` pipeline executes the following steps:
+
+1. **Checkout Code** (Full History).
+2. **TruffleHog Scan** (Fails on secrets).
+3. **Setup & Run TFLint** (Fails on syntax/quality).
+4. **Run Checkov** (Fails on insecure config).
+5. **Configure AWS Credentials** (OIDC).
+6. **Terraform Init & Plan**.
+
+This architecture ensures that **no insecure or broken code can ever be deployed to the cloud.**
