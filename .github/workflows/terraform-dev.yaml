@@ -24,6 +24,12 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      - name: TruffleHog Secrets Scan
+        uses: trufflesecurity/trufflehog@v3
+        with:
+          path: ./
+          extra_args: --only-verified
+
       - name: Setup TFLint
         uses: terraform-linters/setup-tflint@v4
         with:
