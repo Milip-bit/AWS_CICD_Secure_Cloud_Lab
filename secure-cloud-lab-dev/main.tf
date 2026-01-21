@@ -23,13 +23,23 @@ provider "aws" {
 resource "aws_s3_bucket" "test-bucket" {
   bucket = "milip-secure-lab-bucket-001"
 
+  # checkov:skip=CKV_AWS_145: "Uzywamy standardowego szyfrowania SSE-S3 zamiast KMS zeby uniknac kosztow w Labie"
+  # checkov:skip=CKV_AWS_18: "Logowanie dostepu wymaga dodatkowego bucketa, pomijamy w Labie"
+  # checkov:skip=CKV_AWS_144: "Replikacja miedzy regionami nie jest wymagana w srodowisku Dev"
+  # checkov:skip=CKV2_AWS_61: "Lifecycle configuration nie jest wymagana w Labie"
+  # checkov:skip=CKV2_AWS_62: "Powiadomienia o zdarzeniach nie sa wymagane"
   tags = {
     Name        = "My bucket"
     Environment = "Dev"
     Project     = "SecurePipeline"
   }
 }
-
+resource "aws_s3_bucket_versioning" "test_bucket_versioning" {
+  bucket = aws_s3_bucket.test-bucket.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
 resource "aws_s3_bucket_public_access_block" "test-bucket-block" {
   bucket = aws_s3_bucket.test-bucket.id
 
