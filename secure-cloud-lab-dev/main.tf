@@ -23,11 +23,11 @@ provider "aws" {
 resource "aws_s3_bucket" "test-bucket" {
   bucket = "milip-secure-lab-bucket-001"
 
-  # checkov:skip=CKV_AWS_145: "Uzywamy standardowego szyfrowania SSE-S3 zamiast KMS zeby uniknac kosztow w Labie"
-  # checkov:skip=CKV_AWS_18: "Logowanie dostepu wymaga dodatkowego bucketa, pomijamy w Labie"
-  # checkov:skip=CKV_AWS_144: "Replikacja miedzy regionami nie jest wymagana w srodowisku Dev"
-  # checkov:skip=CKV2_AWS_61: "Lifecycle configuration nie jest wymagana w Labie"
-  # checkov:skip=CKV2_AWS_62: "Powiadomienia o zdarzeniach nie sa wymagane"
+  # checkov:skip=CKV_AWS_145: "Using standard SSE-S3 encryption instead of KMS to avoid extra costs in Lab"
+  # checkov:skip=CKV_AWS_18: "Access logging requires an extra bucket; skipped for Lab simplicity"
+  # checkov:skip=CKV_AWS_144: "Cross-region replication is not required for the Dev environment"
+  # checkov:skip=CKV2_AWS_61: "Lifecycle configuration is not required for this Lab resource"
+  # checkov:skip=CKV2_AWS_62: "S3 event notifications are not required for this use case"
   tags = {
     Name        = "My bucket"
     Environment = "Dev"
