@@ -1,0 +1,74 @@
+name: "Terraform PROD Pipeline"
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "secure-cloud-lab-prod/**"
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  terraform-prod:
+    name: "Terraform Apply (PROD)"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./secure-cloud-lab-prod
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # --- SECURITY SCANNING ---
+      - name: TruffleHog Secrets Scan
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          extra_args: --only-verified
+
+      - name: Setup TFLint
+        uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: v0.52.0
+
+      - name: Init TFLint
+        run: tflint --init
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Run TFLint
+        run: tflint -f compact
+
+      - name: Run Checkov
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: secure-cloud-lab-prod
+          framework: terraform
+          skip_check: CKV_AWS_1
+
+      # --- AWS AUTH ---
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/GitHubActions-Terraform-Role
+          aws-region: eu-north-1
+
+      # --- TERRAFORM ---
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Plan
+        run: terraform plan -out=tfplan
+
+      - name: Terraform Apply
+        if: github.ref == 'refs/heads/main'
+        run: terraform apply -auto-approve tfplan
