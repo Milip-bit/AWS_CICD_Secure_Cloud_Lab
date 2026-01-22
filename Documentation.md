@@ -2,15 +2,15 @@
 
 **Author:** Filip (DevSecOps Engineer)
 **Date:** January 2026
-**Project Status:** Phase 3 Completed (DevSecOps Integration)
+**Project Status:** Completed (Multi-Environment DevSecOps Pipeline)
 
 ---
 
 ## 1. Executive Summary
 
-This project demonstrates the implementation of a **Secure-by-Design** cloud infrastructure pipeline. The goal was to move away from manual console operations ("ClickOps") to a fully automated **Infrastructure as Code (IaC)** model using Terraform and GitHub Actions.
+This project demonstrates the implementation of a **Secure-by-Design** cloud infrastructure pipeline. The goal was to eliminate manual console operations ("ClickOps") in favor of a fully automated **Infrastructure as Code (IaC)** model using Terraform and GitHub Actions.
 
-A critical focus was placed on **Shift-Left Security**—integrating security controls (Static Analysis, Secret Scanning, Policy Compliance) into the earliest stages of the CI/CD pipeline, ensuring that insecure code is rejected before it ever reaches the cloud.
+A critical focus was placed on **Shift-Left Security**—integrating security controls (Static Analysis, Secret Scanning, Policy Compliance) into the earliest stages of the CI/CD pipeline, ensuring that insecure code is rejected before it ever reaches the AWS cloud.
 
 ---
 
@@ -37,32 +37,27 @@ The infrastructure layer was designed for scalability, security, and team collab
 
 ### 3.1. Project Structure (Monorepo)
 
-Adopted a directory structure supporting multiple environments:
+Adopted a directory structure supporting multiple environments within a single repository:
 
 ```text
 AWS_CICD_Project/
-├── secure-cloud-lab-dev/   # Development Environment (Current Focus)
+├── secure-cloud-lab-dev/   # Development Environment
 │   ├── main.tf
 │   ├── .tflint.hcl
 │   └── .gitignore
-├── secure-cloud-lab-prod/  # Production Environment (Placeholder)
+├── secure-cloud-lab-prod/  # Production Environment
+│   ├── main.tf             # Mirrored configuration with Prod-specific values
+│   └── .tflint.hcl
 └── README.md
 
 ```
 
-### 3.2. Repository Hygiene (`.gitignore`)
-
-Configured Git to strictly ignore sensitive local Terraform files:
-
-- `.terraform/`
-- `*.tfstate`, `*.tfstate.backup`
-- `*.tfvars`
-
-### 3.3. Remote State Management
+### 3.2. Remote State Management
 
 Instead of storing the `terraform.tfstate` file locally (which poses security risks and hinders collaboration), a Remote Backend architecture was deployed:
 
 - **Storage (S3):** The state file is stored in a private S3 bucket with **Server-Side Encryption (SSE-S3)** enabled.
+- **Isolation:** `dev` state is stored at key `dev/terraform.tfstate`, and `prod` state at `prod/terraform.tfstate`.
 - **Locking (DynamoDB):** A DynamoDB table `terraform-locks` is used to prevent race conditions. If two pipelines run simultaneously, the database locks the state file to prevent corruption.
 
 ---
@@ -114,7 +109,6 @@ This phase transformed the pipeline from a simple "deployer" into a "security ga
 
 - **Tool:** TFLint
 - **Purpose:** Validates Terraform code for syntax errors, deprecated syntax, and cloud provider-specific issues (e.g., invalid instance types).
-- **Configuration:** Added `.tflint.hcl` and enforced `required_version` in `main.tf` to standardize the Terraform version across the team.
 
 ### 5.2. Secret Scanning (TruffleHog)
 
@@ -128,19 +122,39 @@ This phase transformed the pipeline from a simple "deployer" into a "security ga
 
 - **Tool:** Checkov (by Prisma Cloud)
 - **Purpose:** Scans Terraform code against CIS Benchmarks and security best practices.
-- **Implementation & Risk Acceptance:**
-- **Identified Issue:** The S3 bucket lacked versioning (Critical Risk).
-- **Fix:** Updated `main.tf` to enable versioning.
-- **Risk Acceptance:** Several checks (e.g., KMS encryption, Cross-Region Replication) were excessively costly for a Lab environment. These were explicitly skipped using inline comments:
+- **Risk Acceptance Strategy:**
+- **Fix:** Critical issues (like missing S3 versioning) were fixed in `main.tf`.
+- **Skip:** Cost-prohibitive rules for a Lab environment (like KMS encryption or Cross-Region Replication) were explicitly skipped using inline comments with justifications:
 
 ```hcl
-# checkov:skip=CKV_AWS_145: "Skipping KMS encryption to reduce lab costs"
+# checkov:skip=CKV_AWS_145: "Using standard SSE-S3 encryption instead of KMS to avoid extra costs in Lab"
 
 ```
 
 ---
 
-## 6. Engineering Challenges & Troubleshooting Log
+## 6. Phase 4: Multi-Environment Lifecycle Management
+
+We implemented full lifecycle control for both Development and Production environments.
+
+### 6.1. Deployment Strategy
+
+- **Trigger:** Push to `main` branch.
+- **Logic:**
+- Changes in `secure-cloud-lab-dev/` trigger the Dev pipeline.
+- Changes in `secure-cloud-lab-prod/` trigger the Prod pipeline.
+
+- **Action:** `terraform apply -auto-approve` is executed only if all security gates pass.
+
+### 6.2. Destruction Strategy (FinOps)
+
+- **Trigger:** Manual (`workflow_dispatch`).
+- **Implementation:** Two separate workflows (`terraform-destroy.yaml` and `terraform-destroy-prod.yaml`) were created.
+- **Mechanism:** Each workflow sets the specific `working-directory` to ensure Terraform loads the correct state file (`dev` vs `prod`) before executing `destroy`.
+
+---
+
+## 7. Engineering Challenges & Troubleshooting Log
 
 A summary of the critical issues encountered and resolved during implementation.
 
@@ -148,18 +162,13 @@ A summary of the critical issues encountered and resolved during implementation.
 
 - **Symptom:** The CI/CD pipeline failed to authenticate with AWS, displaying a generic `Invalid ARN` error.
 - **Root Cause:** The AWS IAM Identity Provider did not have the correct/current Certificate Thumbprint for GitHub, causing the SSL handshake to fail.
-- **Resolution:** Manually retrieved the GitHub OIDC thumbprints (`6938fd4d...`) and updated the provider via AWS CLI:
-
-```bash
-aws iam update-open-id-connect-provider-thumbprint ...
-
-```
+- **Resolution:** Manually retrieved the GitHub OIDC thumbprints and updated the provider via AWS CLI.
 
 ### Issue 2: The Double ARN Injection
 
 - **Symptom:** Authentication failed despite fixing the thumbprint.
-- **Root Cause:** The GitHub Secret `AWS_ACCOUNT_ID` contained the full ARN string (`arn:aws:iam::123...`) instead of just the ID (`123...`). The pipeline code concatenated this, resulting in `arn:aws:iam::arn:aws:iam::123...`.
-- **Resolution:** Updated the GitHub Secret to contain only the numeric ID and adjusted the YAML workflow to construct the ARN dynamically.
+- **Root Cause:** The GitHub Secret `AWS_ACCOUNT_ID` was misused in the YAML string interpolation, resulting in a malformed ARN: `arn:aws:iam::arn:aws:iam::123...`.
+- **Resolution:** Corrected the YAML configuration to properly construct the ARN.
 
 ### Issue 3: Shallow Clone Scanning
 
@@ -167,17 +176,14 @@ aws iam update-open-id-connect-provider-thumbprint ...
 - **Root Cause:** GitHub Actions defaults to `fetch-depth: 1` (shallow clone). TruffleHog cannot scan history that isn't there.
 - **Resolution:** Updated the `actions/checkout` step to use `fetch-depth: 0`.
 
+### Issue 4: "NoSuchBucket" during Prod Initialization
+
+- **Symptom:** The Prod pipeline failed to initialize the backend.
+- **Root Cause:** The `secure-cloud-lab-prod/main.tf` configuration pointed to a backend bucket name that did not exist (a copy-paste error implying a separate backend bucket for prod).
+- **Resolution:** Updated the configuration to use the **same** physical S3 bucket as Dev, but with a different `key` path (`prod/terraform.tfstate`).
+
 ---
 
-## 7. Current Workflow Architecture
+## 8. Conclusion
 
-The final `.github/workflows/terraform-dev.yaml` pipeline executes the following steps:
-
-1. **Checkout Code** (Full History).
-2. **TruffleHog Scan** (Fails on secrets).
-3. **Setup & Run TFLint** (Fails on syntax/quality).
-4. **Run Checkov** (Fails on insecure config).
-5. **Configure AWS Credentials** (OIDC).
-6. **Terraform Init & Plan**.
-
-This architecture ensures that **no insecure or broken code can ever be deployed to the cloud.**
+The resulting architecture is a robust, enterprise-grade foundation for cloud infrastructure. It ensures that security is not an afterthought but a prerequisite for deployment, while maintaining the flexibility to manage multiple environments and control costs effectively.
