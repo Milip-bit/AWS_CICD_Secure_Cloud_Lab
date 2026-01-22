@@ -7,7 +7,7 @@ terraform {
     }
   }
   backend "s3" {
-    bucket         = "milip-tf-state-backend-001..."
+    bucket         = "milip-tf-state-backend-001"
     key            = "prod/terraform.tfstate"
     region         = "eu-north-1"
     encrypt        = true
