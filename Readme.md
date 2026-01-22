@@ -2,127 +2,130 @@
 
 ## 📖 Project Overview
 
-This project implements a secure, automated **Infrastructure as Code (IaC)** pipeline using **Terraform** and **GitHub Actions**.
+This project implements a secure, automated **Infrastructure as Code (IaC)** pipeline using **Terraform** and **GitHub Actions**. It is designed to demonstrate a robust **DevSecOps** workflow where security controls are integrated into every stage of the infrastructure lifecycle.
 
-The primary goal is to demonstrate a **DevSecOps** and **Shift-Left Security** approach. Security checks and code quality gates are automated at the earliest possible stage in the CI/CD process, ensuring that insecure or malformed code never reaches the AWS cloud environment.
+The architecture supports a **multi-environment strategy** (Development & Production) managed via a Monorepo structure, ensuring strict separation of state and configuration.
 
 ### 🚀 Key Features
 
-- **Infrastructure as Code (IaC):** Fully managed AWS resources via Terraform (S3, Versioning, Public Access Blocks).
-- **Secure Authentication (OIDC):** Eliminated long-lived access keys (`AWS_ACCESS_KEY_ID`) in favor of temporary OpenID Connect federated tokens.
-- **Remote State Management:** Terraform state is encrypted at rest (S3) and locked during writes (DynamoDB) to prevent race conditions.
-- **Automated Security Gates:** The pipeline strictly blocks deployment if critical security vulnerabilities or secrets are detected.
+- **Multi-Environment Deployment:** Isolated environments for `dev` and `prod` with separate state files.
+- **Shift-Left Security:** Automated scanning for code quality (TFLint), secrets (TruffleHog), and misconfigurations (Checkov) before deployment.
+- **Secure Authentication:** **OpenID Connect (OIDC)** federation eliminates long-lived AWS Access Keys in CI/CD.
+- **State Management:** Remote state stored in S3 (encrypted) with DynamoDB locking to prevent race conditions.
+- **Cost Management:** Automated "Destroy" workflows to decommission Lab resources and prevent billing leakage.
 
 ---
 
 ## 🛠️ Pipeline Architecture
 
-Every `git push` triggers a workflow that passes through a rigorous security health check before communicating with AWS.
+The CI/CD pipeline enforces a "Security Gate" approach. Code is only deployed if it passes all scans.
 
 ```mermaid
 graph TD
-    A[Git Push] --> B{Static Analysis}
-    B -->|TFLint| C{Secret Scanning}
-    C -->|TruffleHog| D{IaC Security}
-    D -->|Checkov| E[AWS OIDC Auth]
-    E --> F[Terraform Plan]
+    User[Developer] -->|Push| GitHub[GitHub Repo]
+    subgraph CI_Process [Continuous Integration]
+        GitHub -->|Trigger| TFLint[Static Analysis (TFLint)]
+        TFLint -->|Pass| TruffleHog[Secret Scanning (TruffleHog)]
+        TruffleHog -->|Pass| Checkov[IaC Security (Checkov)]
+    end
 
-    style B fill:#f9f,stroke:#333
-    style C fill:#ff9999,stroke:#333
-    style D fill:#99ccff,stroke:#333
-    style E fill:#orange,stroke:#333
+    subgraph CD_Process [Continuous Deployment]
+        Checkov -->|Pass| Auth[AWS OIDC Auth]
+        Auth --> Plan[Terraform Plan]
+        Plan -->|Branch = Main| Apply[Terraform Apply]
+    end
+
+    subgraph Operations
+        User -->|Manual Trigger| Destroy[Terraform Destroy]
+    end
+
+    Apply --> AWS[AWS Cloud (S3/EC2)]
+    Destroy -->|Cleanup| AWS
 
 ```
 
-### 1. Static Code Analysis (TFLint)
-
-Validates Terraform syntax and AWS-specific configurations (e.g., checking for valid instance types) to catch errors before the plan stage.
-
-### 2. Secret Scanning (TruffleHog)
-
-Scans the entire git history (`fetch-depth: 0`) to ensure no credentials, API keys, or tokens have ever been committed.
-
-- **Config:** Uses `--only-verified` to reduce false positives by checking if keys are active.
-
-### 3. IaC Security Scanning (Checkov)
-
-Audits the infrastructure code against CIS Benchmarks and best practices.
-
-- **Policy:** The pipeline **fails** if critical issues are found.
-- **Risk Acceptance:** Implemented `checkov:skip` annotations for rules not applicable to the Lab environment (e.g., skipping costly KMS encryption in favor of standard SSE-S3).
-
-### 4. Terraform Plan & OIDC
-
-Once security gates are passed, GitHub Actions assumes a strictly scoped IAM Role via **OIDC**, obtains temporary credentials, and generates an execution plan.
-
 ---
 
-## 📂 Project Structure
+## 📂 Repository Structure
+
+The project follows a Monorepo pattern to manage multiple environments efficiently.
 
 ```text
 .
 ├── .github/workflows/
-│   └── terraform-dev.yaml    # CI/CD Pipeline Definition
-├── secure-cloud-lab-dev/     # Development Environment
-│   ├── main.tf               # Infrastructure Definition
-│   ├── .tflint.hcl           # Linter Configuration
-│   └── .gitignore            # Security Exclusions
-└── README.md                 # Documentation
+│   ├── terraform-dev.yaml     # CI/CD for Development (Plan & Apply)
+│   ├── terraform-prod.yaml    # CI/CD for Production (Plan & Apply)
+│   └── terraform-destroy.yaml # Manual Workflow to destroy Dev resources
+├── secure-cloud-lab-dev/      # Development Environment Code
+│   ├── main.tf
+│   └── .tflint.hcl
+├── secure-cloud-lab-prod/     # Production Environment Code
+│   ├── main.tf
+│   └── .tflint.hcl
+└── README.md
 
 ```
 
 ---
 
-## 🔒 Security Measures Implemented
+## 🔒 Security Measures (DevSecOps)
 
-### AWS & IAM Hardening
+### 1. Identity & Access Management (IAM)
 
-- **Least Privilege:** Utilization of a dedicated `devsecops-admin` user and a scoped CI/CD IAM Role.
-- **MFA:** Multi-Factor Authentication enforced for Root and IAM users.
-- **FinOps:** AWS Budgets configured ($1 threshold) to monitor lab costs.
+- **OIDC Federation:** The pipeline authenticates via a temporary token generated by GitHub, exchanged for AWS credentials. No hardcoded secrets exist in the repository.
+- **Least Privilege:** The CI/CD IAM Role has a Trust Policy scoped strictly to this specific GitHub repository.
 
-### Terraform Security
+### 2. Automated Scanning Tools
 
-- **State Encryption:** The `terraform.tfstate` file is encrypted at rest in S3.
-- **S3 Hardening:** Bucket versioning is enabled (enforced by Checkov audit) to prevent data loss.
+- **TFLint:** Enforces valid Terraform syntax and cloud-provider rules (e.g., valid instance types).
+- **TruffleHog:** Deep scans the git history (`fetch-depth: 0`) to detect leaked API keys or passwords.
+- **Checkov:** Audits infrastructure against CIS Benchmarks.
+- _Implementation:_ Blocking deployment on critical failures.
+- _Risk Acceptance:_ Documented waivers for non-critical lab rules using `# checkov:skip` annotations (e.g., skipping KMS encryption to save costs).
 
----
+### 3. Data Protection
 
-## 💻 How to Run
-
-### Prerequisites
-
-1. AWS Account.
-2. Terraform & AWS CLI installed locally.
-3. Remote Backend (S3 Bucket + DynamoDB Table) provisioned manually.
-
-### GitHub Actions Configuration
-
-1. Create an **OIDC Identity Provider** in AWS IAM.
-2. Create an IAM Role with a Trust Policy scoped to your GitHub repository.
-3. Add `AWS_ACCOUNT_ID` to GitHub Secrets.
-
-### Local Testing (Scanners)
-
-```bash
-# Run TFLint
-tflint --init
-tflint
-
-# Run Checkov
-checkov -d secure-cloud-lab-dev --framework terraform
-
-```
+- **S3 Hardening:** Buckets are configured with Versioning (enforced by Checkov) and Public Access Blocks.
+- **State Locking:** Utilizes DynamoDB to prevent concurrent state corruption during team collaboration.
 
 ---
 
-## 📝 Troubleshooting & Lessons Learned
+## 💻 CI/CD Workflows
 
-During the engineering process, several critical challenges were resolved:
+### 🟢 `Terraform Dev/Prod Pipeline`
 
-1. **OIDC Thumbprint Error:** The pipeline initially failed with `Request ARN is invalid`. The root cause was a missing or mismatched GitHub Certificate Thumbprint in AWS IAM. This was resolved by manually updating the thumbprint via AWS CLI.
-2. **Secret Injection:** Incorrectly nesting the secret variable resulted in a malformed ARN (`arn:aws:iam::arn:aws:iam::...`). The workflow was updated to inject only the numeric Account ID.
-3. **Shallow Clones in CI:** Initially, TruffleHog failed to scan history. The `actions/checkout` step was updated with `fetch-depth: 0` to enable deep history scanning.
+- **Trigger:** Push to `main` (filtered by directory path).
+- **Steps:** Checkout -> Security Scans -> OIDC Auth -> Terraform Plan -> Terraform Apply (Auto-Approve).
+
+### 🔴 `Terraform Destroy (Manual)`
+
+- **Trigger:** Manual (`workflow_dispatch`).
+- **Purpose:** Cost optimization. Allows for a one-click teardown of the environment after testing is complete.
+
+---
+
+## 📝 Engineering Challenges & Solutions
+
+During the development of this pipeline, several technical challenges were addressed:
+
+1. **OIDC Thumbprint Mismatch:**
+
+- _Issue:_ Authentication failed with `Invalid Identity Token`.
+- _Solution:_ Manually updated the AWS IAM Identity Provider with the correct GitHub certificate thumbprints via AWS CLI.
+
+2. **Shallow Clone vs. Secret Scanning:**
+
+- _Issue:_ TruffleHog passed immediately without scanning history.
+- _Solution:_ Configured `actions/checkout` with `fetch-depth: 0` to ensure deep historical analysis.
+
+3. **State Locking Warning:**
+
+- _Observation:_ Terraform warned about `dynamodb_table` being deprecated in favor of S3 native locking.
+- _Decision:_ Retained DynamoDB to demonstrate knowledge of classic High Availability state management patterns widely used in enterprise environments.
+
+4. **Backend Separation:**
+
+- _Strategy:_ Implemented strict backend key isolation (`dev/terraform.tfstate` vs `prod/terraform.tfstate`) to allow the same S3 bucket to serve multiple environments without conflict.
 
 ---
 
