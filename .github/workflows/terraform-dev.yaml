@@ -1,6 +1,8 @@
 name: "Terraform Dev Plan"
 
 on:
+  workflow_dispatch:
+
   push:
     branches:
       - main
