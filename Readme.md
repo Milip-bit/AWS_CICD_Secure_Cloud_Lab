@@ -1,4 +1,4 @@
-# 🛡️ AWS Secure Cloud Lab – DevSecOps Pipeline
+ # 🛡️ AWS Secure Cloud Lab – DevSecOps Pipeline
 
 ## 📖 Project Overview
 
@@ -129,7 +129,7 @@ During the development of this pipeline, I encountered several technical challen
 - _Issue:_ TruffleHog passed immediately without scanning history.
 - _Solution:_ Configured `actions/checkout` with `fetch-depth: 0` to ensure deep historical analysis.
 
-3. **Backend "Chicken and Egg" Error:**
+3. **Backend Errors:**
 
 - _Issue:_ Pipeline failed with `NoSuchBucket` when initializing the Prod environment.
 - _Solution:_ Corrected `main.tf` to point to the _existing_ shared Backend S3 bucket, while using a unique `key` (`prod/terraform.tfstate`) to separate the state files.
