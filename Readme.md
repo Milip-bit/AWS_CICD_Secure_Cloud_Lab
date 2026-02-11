@@ -40,14 +40,15 @@ graph TD
     end
 
     subgraph "Lifecycle Management"
-        User -->|Manual Trigger| DestroyDev[Destroy DEV]
-        User -->|Manual Trigger| DestroyProd[Destroy PROD]
+        User2[User] -->|Manual Trigger| DestroyDev[Destroy DEV]
+        User2 -->|Manual Trigger| DestroyProd[Destroy PROD]
     end
 
-    Apply --> AWS[AWS Cloud (S3/EC2)]
+    Apply --> AWS
     DestroyDev -->|Cleanup| AWS
     DestroyProd -->|Cleanup| AWS
 
+    AWS[AWS Cloud - S3/EC2]
 ```
 
 ---
