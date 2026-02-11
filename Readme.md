@@ -2,26 +2,26 @@
 
 ## 📖 Project Overview
 
-This project implements a production-grade, automated **Infrastructure as Code (IaC)** pipeline using **Terraform** and **GitHub Actions**. It demonstrates a robust **DevSecOps** workflow where security controls are integrated into every stage of the infrastructure lifecycle.
+This project aims to implement an automated **Infrastructure as Code (IaC)** pipeline using **Terraform** and **GitHub Actions**. It demonstrates a robust **DevSecOps** workflow where security controls are integrated into every stage of the infrastructure lifecycle.
 
 The architecture follows a **Monorepo** pattern with a multi-environment strategy, strictly separating Development (`dev`) and Production (`prod`) infrastructure and state.
 
 ### 🚀 Key Features
 
 - **Multi-Environment Strategy:** Isolated `dev` and `prod` environments with separate S3 backend paths to prevent state corruption.
-- **Shift-Left Security:** Automated scanning pipeline:
+- **Shift-Left Security:** Automated scanning pipeline.
 - **TFLint:** Code quality and syntax validation.
 - **TruffleHog:** Deep history scanning for leaked secrets.
 - **Checkov:** Policy-as-Code scanning against CIS Benchmarks.
 
-- **Secure Authentication:** **OpenID Connect (OIDC)** federation eliminates long-lived AWS Access Keys in CI/CD.
+- **Secure Authentication:** **OpenID Connect (OIDC)** eliminates long-lived AWS Access Keys in CI/CD.
 - **Lifecycle Management:** Automated workflows for deploying (`Apply`) and decommissioning (`Destroy`) resources to manage cloud costs (FinOps).
 
 ---
 
 ## 🛠️ Architecture & Pipeline Flow
 
-The CI/CD pipeline acts as a security gatekeeper. Code is only deployed if it passes all automated checks.
+The CI/CD pipeline acts as a gatekeeper. Code is only deployed if it passes all automated checks.
 
 ```mermaid
 graph TD
@@ -100,12 +100,11 @@ graph TD
 
 - **Trigger:** Push to `main` (filtered by directory path `secure-cloud-lab-dev/**` or `prod/**`).
 - **Process:**
-
-1. **Checkout:** Full history for secret scanning.
-2. **Scan:** TFLint -> TruffleHog -> Checkov.
-3. **Auth:** Assume IAM Role via OIDC.
-4. **Plan:** Generate execution plan.
-5. **Apply:** Auto-approve changes (only on `main` branch).
+  1. **Checkout:** Full history for secret scanning.
+  2. **Scan:** TFLint -> TruffleHog -> Checkov.
+  3. **Auth:** Assume IAM Role via OIDC.
+  4. **Plan:** Generate execution plan.
+  5. **Apply:** Auto-approve changes (only on `main` branch).
 
 ### 🔴 Destruction Pipelines (`Manual`)
 
@@ -117,7 +116,7 @@ graph TD
 
 ## 📝 Engineering Challenges & Troubleshooting
 
-During the development of this pipeline, several technical challenges were addressed:
+During the development of this pipeline, I encountered several technical challenges:
 
 1. **OIDC Thumbprint Mismatch:**
 

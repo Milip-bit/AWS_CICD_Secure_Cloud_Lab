@@ -1,6 +1,6 @@
 # 📘 AWS Secure Cloud Pipeline – Comprehensive Technical Documentation
 
-**Author:** Filip (DevSecOps Engineer)
+**Author:** Filip (CSOC Analyst)
 **Date:** January 2026
 **Project Status:** Completed (Multi-Environment DevSecOps Pipeline)
 
@@ -8,7 +8,7 @@
 
 ## 1. Executive Summary
 
-This project demonstrates the implementation of a **Secure-by-Design** cloud infrastructure pipeline. The goal was to eliminate manual console operations ("ClickOps") in favor of a fully automated **Infrastructure as Code (IaC)** model using Terraform and GitHub Actions.
+This project demonstrates the implementation of a **Secure-by-Design** cloud infrastructure pipeline. The goal was to eliminate manual console operations in favor of a fully automated **Infrastructure as Code (IaC)** model using Terraform and GitHub Actions.
 
 A critical focus was placed on **Shift-Left Security**—integrating security controls (Static Analysis, Secret Scanning, Policy Compliance) into the earliest stages of the CI/CD pipeline, ensuring that insecure code is rejected before it ever reaches the AWS cloud.
 
@@ -68,7 +68,7 @@ This phase focused on eliminating long-lived credentials (`AWS_ACCESS_KEY_ID` / 
 
 ### 4.1. The Solution: OpenID Connect (OIDC)
 
-We configured a **Federated Identity** trust between GitHub and AWS.
+I configured a **Federated Identity** trust between GitHub and AWS.
 
 1. **Identity Provider:** Added GitHub's OIDC URL (`https://token.actions.githubusercontent.com`) to AWS IAM.
 2. **Thumbprint Validation:** Configured the specific SHA-1 certificate thumbprints for GitHub servers to establish a chain of trust.
@@ -103,8 +103,6 @@ This JSON policy ensures that **only this specific GitHub repository** can assum
 
 ## 5. Phase 3: DevSecOps Integration (Shift-Left)
 
-This phase transformed the pipeline from a simple "deployer" into a "security gatekeeper."
-
 ### 5.1. Static Code Analysis (TFLint)
 
 - **Tool:** TFLint
@@ -135,11 +133,11 @@ This phase transformed the pipeline from a simple "deployer" into a "security ga
 
 ## 6. Phase 4: Multi-Environment Lifecycle Management
 
-We implemented full lifecycle control for both Development and Production environments.
+I implemented full lifecycle control for both Development and Production environments.
 
 ### 6.1. Deployment Strategy
 
-- **Trigger:** Push to `main` branch.
+- **Trigger:** Push to `main` branch and manual.
 - **Logic:**
 - Changes in `secure-cloud-lab-dev/` trigger the Dev pipeline.
 - Changes in `secure-cloud-lab-prod/` trigger the Prod pipeline.
@@ -158,7 +156,7 @@ We implemented full lifecycle control for both Development and Production enviro
 
 A summary of the critical issues encountered and resolved during implementation.
 
-### Issue 1: "Request ARN is invalid" (The OIDC Thumbprint Saga)
+### Issue 1: "Request ARN is invalid" (The OIDC Thumbprint)
 
 - **Symptom:** The CI/CD pipeline failed to authenticate with AWS, displaying a generic `Invalid ARN` error.
 - **Root Cause:** The AWS IAM Identity Provider did not have the correct/current Certificate Thumbprint for GitHub, causing the SSL handshake to fail.
